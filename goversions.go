@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -18,6 +19,7 @@ var rootCmd = &cobra.Command{
 
 func main() {
 	rootCmd.AddCommand(listCommand())
+	rootCmd.AddCommand(nextCommand())
 	rootCmd.Execute()
 }
 
@@ -39,8 +41,38 @@ func listCommand() *cobra.Command {
 }
 
 func listAction(cmd *cobra.Command, args []string) {
+	results := fetchReleases(allFlag)
+
+	for _, result := range results {
+		fmt.Println(result.Version)
+	}
+}
+
+func nextCommand() *cobra.Command {
+	cmd := cobra.Command{
+		Use:     "next",
+		Aliases: []string{"l"},
+		Short:   "Get next release (beta,rc)",
+		Run:     nextAction,
+	}
+
+	return &cmd
+}
+
+func nextAction(cmd *cobra.Command, args []string) {
+	results := fetchReleases(true)
+
+	for _, result := range results {
+		if strings.Index(result.Version, "beta") > -1 ||
+			strings.Index(result.Version, "rc") > -1 {
+			fmt.Println(result.Version)
+		}
+	}
+}
+
+func fetchReleases(all bool) []Result {
 	url := "https://golang.org/dl/?mode=json"
-	if allFlag {
+	if all {
 		url = "https://golang.org/dl/?mode=json&include=all"
 	}
 
@@ -62,17 +94,7 @@ func listAction(cmd *cobra.Command, args []string) {
 	if err != nil {
 		log.Fatalf("Failed to parse releases: %s", err)
 	}
-
-	seen := make(map[string]bool)
-	for _, result := range results {
-		for _, f := range result.Files {
-			if seen[f.Version] {
-				continue
-			}
-			fmt.Println(f.Version)
-			seen[f.Version] = true
-		}
-	}
+	return results
 }
 
 type Result struct {
