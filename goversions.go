@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 
@@ -22,11 +23,15 @@ var rootCmd = &cobra.Command{
 func main() {
 	rootCmd.AddCommand(listCommand())
 	rootCmd.AddCommand(nextCommand())
+	rootCmd.AddCommand(urlCommand())
 	rootCmd.Execute()
 }
 
 var (
-	allFlag bool
+	allFlag     bool
+	versionFlag string
+	osFlag      string
+	archFlag    string
 )
 
 func listCommand() *cobra.Command {
@@ -78,7 +83,54 @@ func nextAction(cmd *cobra.Command, args []string) {
 		}
 	}
 	fmt.Println(max.String())
+}
 
+func urlCommand() *cobra.Command {
+	cmd := cobra.Command{
+		Use:   "url",
+		Short: "Get download url and sha256 for a version and platform",
+		Run:   urlAction,
+	}
+
+	cmd.Flags().StringVarP(&versionFlag, "version", "", "", "version (defaults to latest stable)")
+	cmd.Flags().StringVarP(&osFlag, "os", "", "", "OS (defaults to current OS, 'all' lists all)")
+	cmd.Flags().StringVarP(&archFlag, "arch", "", "", "Arch (defaults to current Arch, 'all' lists all)")
+
+	return &cmd
+
+}
+
+func urlAction(cmd *cobra.Command, args []string) {
+	results := fetchReleases(versionFlag != "")
+
+	if osFlag == "" {
+		osFlag = runtime.GOOS
+	}
+	if archFlag == "" {
+		archFlag = runtime.GOARCH
+	}
+
+	if versionFlag == "" {
+		versionFlag = results[0].Version
+	}
+
+	if !strings.HasPrefix(versionFlag, "go") {
+		versionFlag = "go" + versionFlag
+	}
+
+	for _, result := range results {
+		if result.Version != versionFlag {
+			continue
+		}
+		for _, file := range result.Files {
+			matchArch := archFlag == "all" || file.Arch == archFlag
+			matchOS := osFlag == "all" || file.Os == osFlag
+
+			if matchArch && matchOS {
+				fmt.Printf("%-55s %s %-10s %s\n", "https://dl.google.com/go/"+file.Filename, file.Sha256, file.Os, file.Arch)
+			}
+		}
+	}
 }
 
 func fetchReleases(all bool) []Result {
